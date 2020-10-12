@@ -10,7 +10,9 @@
 
 #define RANDOM_CHAR_READ_BLOCK_SIZE 10000
 #define THREADS_AMOUNT 8
-#define ALLOCATE_BYTES 10
+#define ALLOCATE_MBYTES 276
+#define OUTPUT_FILE_SIZE 47
+#define IO_BLOCK_SIZE 36
 
 //#define LOG_MEMORY_PROGRESS 0
 
@@ -18,7 +20,7 @@
 
 sem_t sem;
 unsigned long totalBytesWrote = 0;
-int mBytes = 0;
+int bytes = 0;
 int randomByteIndex = RANDOM_CHAR_READ_BLOCK_SIZE;
 char randomChar[RANDOM_CHAR_READ_BLOCK_SIZE];
 
@@ -35,8 +37,7 @@ unsigned char ReadChar(int randomFD) {
     if (randomByteIndex < RANDOM_CHAR_READ_BLOCK_SIZE) {
         randomByteIndex += 1;
         return randomChar[randomByteIndex];
-    }
-    else {
+    } else {
         size_t result = read(randomFD, &randomChar, sizeof(randomChar));
         if (result == -1) {
             perror("Can't read int from /dev/urandom\n");
@@ -58,7 +59,7 @@ void* WriteToMemory(void* args) {
         sem_wait(&sem);
         totalBytesWrote += 1;
         if (totalBytesWrote % 100 == 0)
-            printf("%lu/%d\n", totalBytesWrote, mBytes);
+            printf("%lu/%d\n", totalBytesWrote, bytes);
         sem_post(&sem);
 #endif
     }
@@ -67,9 +68,34 @@ void* WriteToMemory(void* args) {
     free(writeArgs);
 }
 
+void WriteToFile(const unsigned char* memoryRegion, FILE* file, size_t fileNum, size_t bytesCount) {
+    unsigned char ioBlock[IO_BLOCK_SIZE];
+    int ioBlockByte = 0;
+    int totalBytesWrittenToFile = 0;
+//    sem_wait(&sem);
+    for (size_t i = fileNum * OUTPUT_FILE_SIZE; i < fileNum * OUTPUT_FILE_SIZE + bytesCount; i++) {
+        ioBlock[ioBlockByte] = memoryRegion[i];
+        ioBlockByte += 1;
+        if (ioBlockByte >= IO_BLOCK_SIZE) {
+            fprintf(file, "%s", ioBlock);
+            ioBlockByte = 0;
+            totalBytesWrittenToFile += IO_BLOCK_SIZE;
+        }
+    }
+
+    if (ioBlockByte > 0) {
+        fprintf(file, "%s", ioBlock);
+        totalBytesWrittenToFile += ioBlockByte + 1;
+    }
+
+    fflush(file);
+    printf("Total bytes written to file: %d\n", totalBytesWrittenToFile);
+//    sem_post(&sem);
+}
+
 int main() {
     sem_init(&sem, 0, 1);
-    mBytes = ALLOCATE_BYTES * pow(10, 6);
+    bytes = ALLOCATE_MBYTES * pow(10, 6);
 
     int outputFD = open("output", O_RDWR | O_CREAT | O_TRUNC, (mode_t) 0600);
     int randomFD = open("/dev/urandom", O_RDONLY);
@@ -84,7 +110,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    size_t fileSize = mBytes + 1;
+    size_t fileSize = bytes + 1;
 
     if (lseek(outputFD, fileSize - 1, SEEK_SET) == -1) {
         close(outputFD);
@@ -102,7 +128,7 @@ int main() {
 
     memoryRegion = mmap(
             (void*) memoryRegion,
-            mBytes,
+            bytes,
             PROT_READ | PROT_WRITE,
             MAP_SHARED,
             outputFD, 0);
@@ -115,8 +141,8 @@ int main() {
 
     printf("Size of pointer: %d\n", sizeof(*memoryRegion));
 
-    const int memoryRemainder = mBytes / THREADS_AMOUNT / sizeof(*memoryRegion);
-    const int memoryQuotient = mBytes % THREADS_AMOUNT / sizeof(*memoryRegion);
+    const int memoryRemainder = bytes / THREADS_AMOUNT / sizeof(*memoryRegion);
+    const int memoryQuotient = bytes % THREADS_AMOUNT / sizeof(*memoryRegion);
 
     printf("Remainder: %d\n", memoryRemainder);
     printf("Quotient: %d\n", memoryQuotient);
@@ -135,7 +161,7 @@ int main() {
         args = malloc(sizeof(*args));
         args->memoryRegion = memoryRegion;
         args->randomFD = randomFD;
-        args->mBytes = mBytes;
+        args->mBytes = bytes;
 
         args->start = i * memoryRemainder;
         args->end = ++i * memoryRemainder;
@@ -155,11 +181,11 @@ int main() {
         args = malloc(sizeof(*args));
         args->memoryRegion = memoryRegion;
         args->randomFD = randomFD;
-        args->mBytes = mBytes;
+        args->mBytes = bytes;
 
         args->start = i * memoryRemainder;
         args->end = i * memoryRemainder + memoryQuotient;
-        WriteToMemory((void *) args);
+        WriteToMemory((void*) args);
     }
 
     for (int i = 0; i < THREADS_AMOUNT; i++) {
@@ -173,11 +199,48 @@ int main() {
 
     printf("Filling up the memory took: %f seconds\n", elapsed);
 
-    if (msync(memoryRegion, mBytes, MS_SYNC) == -1) {
-        perror("Could not sync the file to disk");
+//    if (msync(memoryRegion, mBytes, MS_SYNC) == -1) {
+//        perror("Could not sync the file to disk");
+//    }
+
+    int filesAmount = (ALLOCATE_MBYTES / OUTPUT_FILE_SIZE) + 1;
+    printf("Files amount: %d\n", filesAmount);
+    FILE* files[filesAmount];
+    char filename[5];
+
+    for (i = 0; i < filesAmount; i++) {
+        sprintf(filename, "%d", i);
+        files[i] = fopen(filename, "wb+");
+        if (files[i] == NULL) {
+            perror("Can't open");
+            exit(EXIT_FAILURE);
+        }
+        fclose(files[i]);
+
+        sprintf(filename, "%d", i);
+        files[i] = fopen(filename, "ab+");
+        if (files[i] == NULL) {
+            perror("Can't open");
+            exit(EXIT_FAILURE);
+        }
     }
 
-    if (munmap(memoryRegion, mBytes) == -1) {
+
+    printf("Allocated bytes: %d\n", bytes);
+    int fileSizeRemainder = bytes / (filesAmount);
+    int fileSizeQuotient = bytes % (filesAmount);
+    printf("File size remainder: %d\n", fileSizeRemainder);
+    printf("File size quotient: %d\n", fileSizeQuotient);
+    for (i = 0; i < filesAmount; i++) {
+        if (fileSizeQuotient != 0 && i == filesAmount - 1) {
+            WriteToFile(memoryRegion, files[i], i, fileSizeQuotient);
+        } else {
+            WriteToFile(memoryRegion, files[i], i, fileSizeRemainder);
+        }
+        fclose(files[i]);
+    }
+
+    if (munmap(memoryRegion, bytes) == -1) {
         close(outputFD);
         close(randomFD);
         perror("Error un-mmapping the file");
