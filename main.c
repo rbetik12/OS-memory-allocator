@@ -41,7 +41,7 @@ struct ReadFromFileArgs {
     sem_t sem;
 };
 
-void CleanFiles(size_t filesAmount, FILE ** files) {
+void CleanFiles(size_t filesAmount, FILE** files) {
     int i;
     char filename[5];
     for (i = 0; i < filesAmount; i++) {
@@ -55,7 +55,7 @@ void CleanFiles(size_t filesAmount, FILE ** files) {
     }
 }
 
-void OpenFiles(size_t filesAmount, FILE ** files) {
+void OpenFiles(size_t filesAmount, FILE** files) {
     int i;
     char filename[5];
     for (i = 0; i < filesAmount; i++) {
@@ -191,7 +191,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    unsigned char* memoryRegion = NULL;
+    unsigned char* memoryRegion = (unsigned char*) 0x28B070E0;
 
     memoryRegion = mmap(
             (void*) memoryRegion,
