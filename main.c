@@ -70,7 +70,6 @@ int main() {
     }
 
 //-------------------------------------WRITES RANDOM DATA TO MEMORY-------------------------------------
-
     const int memoryRemainder = bytes / THREADS_AMOUNT / sizeof(*memoryRegion);
     const int memoryQuotient = bytes % THREADS_AMOUNT / sizeof(*memoryRegion);
 #ifdef LOG
@@ -215,8 +214,8 @@ int main() {
         fclose(files[i]);
     }
 
-//    pthread_detach(writeToFilesThreadId);
     pthread_cancel(writeToFilesThreadId);
+
     if (munmap(memoryRegion, bytes) == -1) {
 //        close(outputFD);
         close(randomFD);

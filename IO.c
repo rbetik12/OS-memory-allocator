@@ -1,6 +1,7 @@
 #include "IO.h"
 #include "Constants.h"
 #include <unistd.h>
+#include <fcntl.h>
 
 //sem_t totalBytesReadSem;
 size_t totalBytesRead;
@@ -37,9 +38,13 @@ void CleanFiles(size_t filesAmount, FILE** files) {
 void OpenFiles(size_t filesAmount, FILE** files) {
     int i;
     char filename[5];
+    int fd;
     for (i = 0; i < filesAmount; i++) {
         sprintf(filename, "%d", i);
         files[i] = fopen(filename, "ab+");
+        fd = fileno(files[i]);
+        posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+        posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
         if (files[i] == NULL) {
             perror("Can't open");
             exit(EXIT_FAILURE);
