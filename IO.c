@@ -1,5 +1,6 @@
 #include "IO.h"
 #include "Constants.h"
+#include <unistd.h>
 
 //sem_t totalBytesReadSem;
 size_t totalBytesRead;
@@ -46,6 +47,17 @@ void OpenFiles(size_t filesAmount, FILE** files) {
     }
 }
 
+void OpenFile(int fd) {
+    char filename[5];
+    sprintf(filename, "%d", fd);
+    FILE* file = fopen(filename, "ab+");
+
+    if (file == NULL) {
+        perror("Can't open");
+        exit(EXIT_FAILURE);
+    }
+}
+
 unsigned char ReadChar(int randomFD) {
     if (randomByteIndex < RANDOM_CHAR_READ_BLOCK_SIZE) {
         randomByteIndex += 1;
@@ -65,6 +77,7 @@ void* ReadFile(void* args) {
     struct ReadFromFileArgs* fileArgs = (struct ReadFromFileArgs*) args;
     unsigned char readBlock[IO_BLOCK_SIZE];
     size_t readBytes;
+
     while (1) {
         readBytes = fread(readBlock, sizeof(unsigned char), IO_BLOCK_SIZE, fileArgs->file);
 #ifdef LOG
@@ -87,7 +100,7 @@ void* ReadFile(void* args) {
             }
         }
     }
-    free(fileArgs);
+    sleep(1);
 }
 
 void* WriteToMemory(void* args) {
@@ -97,13 +110,6 @@ void* WriteToMemory(void* args) {
         unsigned char random = ReadChar(writeArgs->randomFD);
         writeArgs->memoryRegion[i] = random;
         bytesWrote += 1;
-//#ifdef LOG
-//        sem_wait(&sem);
-//        totalBytesWrote += 1;
-//        if (totalBytesWrote % 1000 == 0)
-//            printf("%lu/%d\n", totalBytesWrote, bytes);
-//        sem_post(&sem);
-//#endif
     }
 
 #ifdef LOG
@@ -135,4 +141,36 @@ void WriteToFile(const unsigned char* memoryRegion, FILE* file, size_t fileNum, 
 #ifdef LOG
     printf("Total bytes written to file: %d\n", totalBytesWrittenToFile);
 #endif
+}
+
+_Noreturn void* WriteToFiles(void* args) {
+    printf("Started writing to files\n");
+    struct WriteToFilesArgs* writeToFilesArgs = (struct WriteToFilesArgs*) args;
+    int i = 0;
+    while (1) {
+        for (i = 0; i < writeToFilesArgs->filesAmount; i++) {
+            CleanFile(i);
+            OpenFile(i);
+            if (writeToFilesArgs->fileSizeQuotient != 0 && i == writeToFilesArgs->filesAmount - 1) {
+                WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeQuotient);
+            } else {
+                WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeRemainder);
+            }
+        }
+    }
+}
+
+void* WriteToFilesOnce(void* args) {
+    struct WriteToFilesArgs* writeToFilesArgs = (struct WriteToFilesArgs*) args;
+    int i = 0;
+    for (i = 0; i < writeToFilesArgs->filesAmount; i++) {
+        CleanFile(i);
+        OpenFile(i);
+        if (writeToFilesArgs->fileSizeQuotient != 0 && i == writeToFilesArgs->filesAmount - 1) {
+            WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeQuotient);
+        } else {
+            WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeRemainder);
+        }
+        fclose(writeToFilesArgs->files[i]);
+    }
 }

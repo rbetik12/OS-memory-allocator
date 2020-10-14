@@ -131,42 +131,51 @@ int main() {
 //-------------------------------------WRITES RANDOM DATA TO FILES-------------------------------------
 
     int filesAmount = (ALLOCATE_MBYTES / OUTPUT_FILE_SIZE) + 1;
-#ifdef LOG
+//#ifdef LOG
     printf("Files amount: %d\n", filesAmount);
-#endif
+//#endif
     FILE* files[filesAmount];
-
+    sem_t * fileSems = malloc(sizeof(sem_t) * filesAmount);
     CleanFiles(filesAmount, files);
     OpenFiles(filesAmount, files);
-
-    clock_gettime(CLOCK_MONOTONIC, &start);
-
-    int fileSizeRemainder = bytes / (filesAmount);
-    int fileSizeQuotient = bytes % (filesAmount);
-    for (i = 0; i < filesAmount; i++) {
-        if (fileSizeQuotient != 0 && i == filesAmount - 1) {
-            WriteToFile(memoryRegion, files[i], i, fileSizeQuotient);
-        } else {
-            WriteToFile(memoryRegion, files[i], i, fileSizeRemainder);
-        }
-        fclose(files[i]);
-    }
-
-    clock_gettime(CLOCK_MONOTONIC, &finish);
-
-    elapsed = (finish.tv_sec - start.tv_sec);
-    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-
-    printf("Writing to files took: %f seconds\n", elapsed);
-
-//-------------------------------------READS AND AGGREGATES RANDOM DATA FROM FILES-------------------------------------
-
-    sem_t fileSems[filesAmount];
-    pthread_t readFromFileThreads[READ_THREADS_AMOUNT];
+    pthread_t writeToFilesThreadId;
 
     for (i = 0; i < filesAmount; i++) {
         sem_init(&fileSems[i], 0, 1);
     }
+
+    struct WriteToFilesArgs* writeToFilesArgs = malloc(sizeof(struct WriteToFilesArgs));
+
+//    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    int fileSizeRemainder = bytes / (filesAmount);
+    int fileSizeQuotient = bytes % (filesAmount);
+
+    writeToFilesArgs->fileSizeQuotient = fileSizeQuotient;
+    writeToFilesArgs->fileSizeRemainder = fileSizeRemainder;
+    writeToFilesArgs->files = files;
+    writeToFilesArgs->fileSems = fileSems;
+    writeToFilesArgs->filesAmount = filesAmount;
+    writeToFilesArgs->memoryRegion = memoryRegion;
+
+    WriteToFilesOnce(writeToFilesArgs);
+
+//    if (pthread_create(&writeToFilesThreadId, NULL, WriteToFiles, writeToFilesArgs)) {
+//        free(writeToFilesArgs);
+//        perror("Can't create write to files thread");
+//    }
+
+//    clock_gettime(CLOCK_MONOTONIC, &finish);
+//
+//    elapsed = (finish.tv_sec - start.tv_sec);
+//    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+//
+//    printf("Writing to files took: %f seconds\n", elapsed);
+
+//-------------------------------------READS AND AGGREGATES RANDOM DATA FROM FILES-------------------------------------
+
+    pthread_t readFromFileThreads[READ_THREADS_AMOUNT];
+
     int fileIndex = 0;
 
     OpenFiles(filesAmount, files);
@@ -178,6 +187,7 @@ int main() {
         if (fileIndex >= filesAmount) fileIndex = 0;
         fileArgs->file = files[fileIndex];
         fileArgs->sem = fileSems[fileIndex];
+        fileArgs->fileIndex = fileIndex;
         fileIndex += 1;
         if (pthread_create(&readFromFileThreads[i], NULL, ReadFile, (void*) fileArgs)) {
             free(fileArgs);
@@ -205,6 +215,8 @@ int main() {
         fclose(files[i]);
     }
 
+//    pthread_detach(writeToFilesThreadId);
+    pthread_cancel(writeToFilesThreadId);
     if (munmap(memoryRegion, bytes) == -1) {
 //        close(outputFD);
         close(randomFD);
@@ -219,6 +231,7 @@ int main() {
     if (close(randomFD)) {
         printf("Error in closing file.\n");
     }
+
 
     return 0;
 }
