@@ -54,6 +54,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    printf("After input char program will allocate memory\n");
+    getchar();
     unsigned char* memoryRegion = (unsigned char*) 0x28B070E0;
 
     memoryRegion = mmap(
@@ -68,6 +70,10 @@ int main() {
         perror("Error mapping a file");
         exit(EXIT_FAILURE);
     }
+    char ch;
+    while ((ch = getchar()) != '\n' && ch != EOF);
+    printf("After input char program will continue writing data to memory\n");
+    getchar();
 
 //-------------------------------------WRITES RANDOM DATA TO MEMORY-------------------------------------
     const int memoryRemainder = bytes / THREADS_AMOUNT / sizeof(*memoryRegion);
@@ -119,6 +125,10 @@ int main() {
     for (i = 0; i < THREADS_AMOUNT; i++) {
         pthread_join(writeToMemoryThreads[i], NULL);
     }
+
+    while ((ch = getchar()) != '\n' && ch != EOF);
+    printf("After input char program will continue writing data to file\n");
+    getchar();
 
     clock_gettime(CLOCK_MONOTONIC, &finish);
 
@@ -222,6 +232,10 @@ int main() {
         perror("Error un-mmapping the file");
         exit(EXIT_FAILURE);
     }
+
+    while ((ch = getchar()) != '\n' && ch != EOF);
+    printf("After input char program will terminate\n");
+    getchar();
 
     if (close(outputFD)) {
         printf("Error in closing file.\n");
