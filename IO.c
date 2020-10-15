@@ -2,6 +2,7 @@
 #include "Constants.h"
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 
 //sem_t totalBytesReadSem;
 size_t totalBytesRead;
@@ -168,6 +169,9 @@ _Noreturn void* WriteToFiles(void* args) {
 void* WriteToFilesOnce(void* args) {
     struct WriteToFilesArgs* writeToFilesArgs = (struct WriteToFilesArgs*) args;
     int i = 0;
+    struct timespec start, finish;
+    double elapsed;
+    clock_gettime(CLOCK_MONOTONIC, &start);
     for (i = 0; i < writeToFilesArgs->filesAmount; i++) {
         CleanFile(i);
         OpenFile(i);
@@ -178,4 +182,9 @@ void* WriteToFilesOnce(void* args) {
         }
         fclose(writeToFilesArgs->files[i]);
     }
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+
+    elapsed = (finish.tv_sec - start.tv_sec);
+    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+    printf("Writing to files took: %f seconds\n", elapsed);
 }

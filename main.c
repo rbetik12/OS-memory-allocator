@@ -126,10 +126,6 @@ int main() {
         pthread_join(writeToMemoryThreads[i], NULL);
     }
 
-    while ((ch = getchar()) != '\n' && ch != EOF);
-    printf("After input char program will continue writing data to file\n");
-    getchar();
-
     clock_gettime(CLOCK_MONOTONIC, &finish);
 
     elapsed = (finish.tv_sec - start.tv_sec);
@@ -137,6 +133,9 @@ int main() {
 
     printf("Filling up the memory took: %f seconds\n", elapsed);
 
+    while ((ch = getchar()) != '\n' && ch != EOF);
+    printf("After input char program will continue writing data to file\n");
+    getchar();
 //-------------------------------------WRITES RANDOM DATA TO FILES-------------------------------------
 
     int filesAmount = (ALLOCATE_MBYTES / OUTPUT_FILE_SIZE) + 1;
