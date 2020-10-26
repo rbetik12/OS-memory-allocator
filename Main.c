@@ -5,7 +5,6 @@
 #include <zconf.h>
 #include <stdlib.h>
 #include <string.h>
-#include <semaphore.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,12 +16,11 @@
 // A=276;B=0x28B070E0;C=mmap;D=74;E=47;F=nocache;G=36;H=random;I=139;J=max;K=sem
 
 extern size_t totalBytesRead;
-extern int bytes;
 
 unsigned char max;
 
 int main() {
-    sem_init(&fileSync, 0, 1);
+    InitSem();
     int bytes;
     bytes = ALLOCATE_MBYTES * pow(10, 6);
 
@@ -140,10 +138,9 @@ int main() {
 //#ifdef LOG
     printf("Files amount: %d\n", filesAmount);
 //#endif
-    int files[filesAmount];
-    CleanFiles(filesAmount, files);
-    OpenFiles(filesAmount, files);
-    printf("Here\n");
+    int* fileDescriptors = malloc(sizeof(int) * filesAmount);
+    CleanFiles(filesAmount);
+    OpenFiles(filesAmount, fileDescriptors);
     pthread_t writeToFilesThreadId;
 
     struct WriteToFilesArgs* writeToFilesArgs = malloc(sizeof(struct WriteToFilesArgs));
@@ -155,13 +152,13 @@ int main() {
 
     writeToFilesArgs->fileSizeQuotient = fileSizeQuotient;
     writeToFilesArgs->fileSizeRemainder = fileSizeRemainder;
-    writeToFilesArgs->files = files;
+    writeToFilesArgs->fileDescriptors = fileDescriptors;
     writeToFilesArgs->filesAmount = filesAmount;
     writeToFilesArgs->memoryRegion = memoryRegion;
 
 //    WriteToFilesOnce(writeToFilesArgs);
 
-    if (pthread_create(&writeToFilesThreadId, NULL, WriteToFiles, writeToFilesArgs)) {
+    if (pthread_create(&writeToFilesThreadId, NULL, WriteToFiles, (void*) writeToFilesArgs)) {
         free(writeToFilesArgs);
         perror("Can't create write to files thread");
     }
@@ -179,14 +176,12 @@ int main() {
 
     int fileIndex = 0;
 
-    OpenFiles(filesAmount, files);
-
     clock_gettime(CLOCK_MONOTONIC, &start);
 
     for (i = 0; i < READ_THREADS_AMOUNT; i++) {
         struct ReadFromFileArgs* fileArgs = malloc(sizeof(struct ReadFromFileArgs));
         if (fileIndex >= filesAmount) fileIndex = 0;
-        fileArgs->fd = files[fileIndex];
+        fileArgs->fd = fileDescriptors[fileIndex];
         fileIndex += 1;
         if (pthread_create(&readFromFileThreads[i], NULL, ReadFile, (void*) fileArgs)) {
             free(fileArgs);
@@ -210,11 +205,11 @@ int main() {
 #endif
     printf("Max value is: %d\n", max);
 
-    for (i = 0; i < filesAmount; i++) {
-        close(files[i]);
-    }
-
     pthread_cancel(writeToFilesThreadId);
+
+    for (i = 0; i < filesAmount; i++) {
+        close(fileDescriptors[i]);
+    }
 
     if (munmap(memoryRegion, bytes) == -1) {
 //        close(outputFD);

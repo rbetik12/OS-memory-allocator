@@ -3,12 +3,18 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <semaphore.h>
 
+static sem_t fileSync;
 size_t totalBytesRead;
 int bytes;
 int randomByteIndex;
 char randomChar[RANDOM_CHAR_READ_BLOCK_SIZE];
 unsigned char max;
+
+void InitSem() {
+    sem_init(&fileSync, 0, 1);
+}
 
 void CleanFile(int fd) {
     char filename[5];
@@ -21,8 +27,9 @@ void CleanFile(int fd) {
     close(file);
 }
 
-void CleanFiles(size_t filesAmount, int * files) {
+void CleanFiles(size_t filesAmount) {
     int i;
+    int files[filesAmount];
     char filename[5];
     for (i = 0; i < filesAmount; i++) {
         sprintf(filename, "%d", i);
@@ -35,12 +42,12 @@ void CleanFiles(size_t filesAmount, int * files) {
     }
 }
 
-void OpenFiles(size_t filesAmount, int * files) {
+void OpenFiles(size_t filesAmount, int* files) {
     int i;
     char filename[5];
     for (i = 0; i < filesAmount; i++) {
         sprintf(filename, "%d", i);
-        files[i] = open(filename, O_RDWR | O_CREAT | O_APPEND, (mode_t) 0600);
+        files[i] = open(filename, O_RDWR | O_CREAT, (mode_t) 0600);
         posix_fadvise(files[i], 0, 0, POSIX_FADV_DONTNEED);
         if (files[i] == -1) {
             perror("Can't open");
@@ -52,7 +59,7 @@ void OpenFiles(size_t filesAmount, int * files) {
 void OpenFile(int fd) {
     char filename[5];
     sprintf(filename, "%d", fd);
-    int file_d = open(filename, O_RDWR | O_CREAT | O_APPEND, (mode_t) 0600);
+    int file_d = open(filename, O_RDWR | O_CREAT, (mode_t) 0600);
 
     if (file_d == -1) {
         perror("Can't open");
@@ -79,20 +86,23 @@ void* ReadFile(void* args) {
     struct ReadFromFileArgs* fileArgs = (struct ReadFromFileArgs*) args;
     unsigned char readBlock[IO_BLOCK_SIZE];
     size_t readBytes;
-
+    printf("Started read from file thread\n");
+    sem_wait(&fileSync);
+    printf("Locked on read\n");
+    if (lseek(fileArgs->fd, 0, SEEK_SET) == -1) {
+        return NULL;
+    }
     while (1) {
         readBytes = read(fileArgs->fd, &readBlock, IO_BLOCK_SIZE);
         if (readBytes == -1) {
             perror("Error reading from file");
             break;
         }
-#ifdef LOG
-        sem_wait(&totalBytesReadSem);
+
         totalBytesRead += readBytes;
-        sem_post(&totalBytesReadSem);
-#endif
         if (readBytes < IO_BLOCK_SIZE) {
             if (readBytes == 0) {
+                printf("Zero\n");
                 break;
             }
         } else {
@@ -103,6 +113,8 @@ void* ReadFile(void* args) {
             }
         }
     }
+    sem_post(&fileSync);
+    printf("Unlocked on read\n");
     sleep(1);
 }
 
@@ -160,38 +172,18 @@ _Noreturn void* WriteToFiles(void* args) {
     int i = 0;
     while (1) {
         sem_wait(&fileSync);
+        printf("Locked on write\n");
         for (i = 0; i < writeToFilesArgs->filesAmount; i++) {
-            CleanFile(i);
-            OpenFile(i);
+//            CleanFile(i);
+//            OpenFile(i);
             if (writeToFilesArgs->fileSizeQuotient != 0 && i == writeToFilesArgs->filesAmount - 1) {
-                WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeQuotient);
+                WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->fileDescriptors[i], i, writeToFilesArgs->fileSizeQuotient);
             } else {
-                WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeRemainder);
+                WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->fileDescriptors[i], i, writeToFilesArgs->fileSizeRemainder);
             }
         }
         sem_post(&fileSync);
+        printf("Unlocked on write\n");
+        break;
     }
-}
-
-void* WriteToFilesOnce(void* args) {
-    struct WriteToFilesArgs* writeToFilesArgs = (struct WriteToFilesArgs*) args;
-    int i = 0;
-    struct timespec start, finish;
-    double elapsed;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    for (i = 0; i < writeToFilesArgs->filesAmount; i++) {
-        CleanFile(i);
-        OpenFile(i);
-        if (writeToFilesArgs->fileSizeQuotient != 0 && i == writeToFilesArgs->filesAmount - 1) {
-            WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeQuotient);
-        } else {
-            WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeRemainder);
-        }
-        close(writeToFilesArgs->files[i]);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &finish);
-
-    elapsed = (finish.tv_sec - start.tv_sec);
-    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    printf("Writing to files took: %f seconds\n", elapsed);
 }

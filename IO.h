@@ -4,9 +4,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <zconf.h>
-#include <semaphore.h>
-
-static sem_t fileSync;
 
 struct WriteToMemoryArgs {
     int randomFD;
@@ -25,12 +22,12 @@ struct WriteToFilesArgs {
     size_t fileSizeQuotient;
     size_t fileSizeRemainder;
     unsigned char* memoryRegion;
-    int* files;
+    int* fileDescriptors;
 };
 
 void CleanFile(int fd);
 
-void CleanFiles(size_t filesAmount, int* files);
+void CleanFiles(size_t filesAmount);
 
 void OpenFiles(size_t filesAmount, int* files);
 
@@ -44,8 +41,8 @@ void* WriteToMemory(void* args);
 
 void WriteToFile(const unsigned char* memoryRegion, int fd, size_t fileNum, size_t bytesCount);
 
-void* WriteToFilesOnce(void* args);
-
 _Noreturn void* WriteToFiles(void * args);
+
+void InitSem();
 
 #endif //LAB1_IO_H
