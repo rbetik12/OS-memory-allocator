@@ -16,18 +16,14 @@
 
 // A=276;B=0x28B070E0;C=mmap;D=74;E=47;F=nocache;G=36;H=random;I=139;J=max;K=sem
 
-extern sem_t totalBytesReadSem;
 extern size_t totalBytesRead;
 extern int bytes;
 
 unsigned char max;
 
 int main() {
-    sem_t sem;
-    sem_t totalBytesReadSem;
+    sem_init(&fileSync, 0, 1);
     int bytes;
-    sem_init(&totalBytesReadSem, 0, 1);
-    sem_init(&sem, 0, 1);
     bytes = ALLOCATE_MBYTES * pow(10, 6);
 
     int outputFD = open("output", O_RDWR | O_CREAT | O_TRUNC, (mode_t) 0600);
@@ -97,7 +93,6 @@ int main() {
         args = malloc(sizeof(*args));
         args->memoryRegion = memoryRegion;
         args->randomFD = randomFD;
-        args->mBytes = bytes;
 
         args->start = i * memoryRemainder;
         args->end = ++i * memoryRemainder;
@@ -116,7 +111,6 @@ int main() {
         args = malloc(sizeof(*args));
         args->memoryRegion = memoryRegion;
         args->randomFD = randomFD;
-        args->mBytes = bytes;
 
         args->start = i * memoryRemainder;
         args->end = i * memoryRemainder + memoryQuotient;
@@ -147,15 +141,10 @@ int main() {
     printf("Files amount: %d\n", filesAmount);
 //#endif
     int files[filesAmount];
-    sem_t * fileSems = malloc(sizeof(sem_t) * filesAmount);
     CleanFiles(filesAmount, files);
     OpenFiles(filesAmount, files);
     printf("Here\n");
     pthread_t writeToFilesThreadId;
-
-    for (i = 0; i < filesAmount; i++) {
-        sem_init(&fileSems[i], 0, 1);
-    }
 
     struct WriteToFilesArgs* writeToFilesArgs = malloc(sizeof(struct WriteToFilesArgs));
 
@@ -167,16 +156,15 @@ int main() {
     writeToFilesArgs->fileSizeQuotient = fileSizeQuotient;
     writeToFilesArgs->fileSizeRemainder = fileSizeRemainder;
     writeToFilesArgs->files = files;
-    writeToFilesArgs->fileSems = fileSems;
     writeToFilesArgs->filesAmount = filesAmount;
     writeToFilesArgs->memoryRegion = memoryRegion;
 
-    WriteToFilesOnce(writeToFilesArgs);
+//    WriteToFilesOnce(writeToFilesArgs);
 
-//    if (pthread_create(&writeToFilesThreadId, NULL, WriteToFiles, writeToFilesArgs)) {
-//        free(writeToFilesArgs);
-//        perror("Can't create write to files thread");
-//    }
+    if (pthread_create(&writeToFilesThreadId, NULL, WriteToFiles, writeToFilesArgs)) {
+        free(writeToFilesArgs);
+        perror("Can't create write to files thread");
+    }
 
 //    clock_gettime(CLOCK_MONOTONIC, &finish);
 //
@@ -199,8 +187,6 @@ int main() {
         struct ReadFromFileArgs* fileArgs = malloc(sizeof(struct ReadFromFileArgs));
         if (fileIndex >= filesAmount) fileIndex = 0;
         fileArgs->fd = files[fileIndex];
-        fileArgs->sem = fileSems[fileIndex];
-        fileArgs->fileIndex = fileIndex;
         fileIndex += 1;
         if (pthread_create(&readFromFileThreads[i], NULL, ReadFile, (void*) fileArgs)) {
             free(fileArgs);

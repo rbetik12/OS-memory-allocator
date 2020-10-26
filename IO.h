@@ -6,10 +6,11 @@
 #include <zconf.h>
 #include <semaphore.h>
 
+static sem_t fileSync;
+
 struct WriteToMemoryArgs {
     int randomFD;
     unsigned char* memoryRegion;
-    int mBytes;
     int start;
     int end;
     pthread_t threadId;
@@ -17,8 +18,6 @@ struct WriteToMemoryArgs {
 
 struct ReadFromFileArgs {
     int fd;
-    sem_t sem;
-    size_t fileIndex;
 };
 
 struct WriteToFilesArgs {
@@ -26,7 +25,6 @@ struct WriteToFilesArgs {
     size_t fileSizeQuotient;
     size_t fileSizeRemainder;
     unsigned char* memoryRegion;
-    sem_t* fileSems;
     int* files;
 };
 
@@ -48,6 +46,6 @@ void WriteToFile(const unsigned char* memoryRegion, int fd, size_t fileNum, size
 
 void* WriteToFilesOnce(void* args);
 
-//_Noreturn void* WriteToFiles(void * args);
+_Noreturn void* WriteToFiles(void * args);
 
 #endif //LAB1_IO_H

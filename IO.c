@@ -4,7 +4,6 @@
 #include <fcntl.h>
 #include <time.h>
 
-//sem_t totalBytesReadSem;
 size_t totalBytesRead;
 int bytes;
 int randomByteIndex;
@@ -133,7 +132,7 @@ void WriteToFile(const unsigned char* memoryRegion, int fd, size_t fileNum, size
         ioBlockByte += 1;
         if (ioBlockByte >= IO_BLOCK_SIZE) {
             ioBlockByte = 0;
-            bytesWritten = write(fd, &ioBlock, IO_BLOCK_SIZE);
+            bytesWritten = write(fd, &ioBlock, IO_BLOCK_SIZE * ((float) rand() / RAND_MAX));
             if (bytesWritten == -1) {
                 perror("Can't write to file");
                 return;
@@ -143,7 +142,7 @@ void WriteToFile(const unsigned char* memoryRegion, int fd, size_t fileNum, size
     }
 
     if (ioBlockByte > 0) {
-        bytesWritten = write(fd, &ioBlock, IO_BLOCK_SIZE - ioBlockByte);
+        bytesWritten = write(fd, &ioBlock, (IO_BLOCK_SIZE - ioBlockByte) * (rand() / RAND_MAX));
         if (bytesWritten == -1) {
             perror("Can't write to file");
             return;
@@ -160,6 +159,7 @@ _Noreturn void* WriteToFiles(void* args) {
     struct WriteToFilesArgs* writeToFilesArgs = (struct WriteToFilesArgs*) args;
     int i = 0;
     while (1) {
+        sem_wait(&fileSync);
         for (i = 0; i < writeToFilesArgs->filesAmount; i++) {
             CleanFile(i);
             OpenFile(i);
@@ -169,6 +169,7 @@ _Noreturn void* WriteToFiles(void* args) {
                 WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeRemainder);
             }
         }
+        sem_post(&fileSync);
     }
 }
 
