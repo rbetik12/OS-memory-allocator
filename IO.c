@@ -14,38 +14,36 @@ unsigned char max;
 void CleanFile(int fd) {
     char filename[5];
     sprintf(filename, "%d", fd);
-    FILE* file = fopen(filename, "wb+");
-    if (file == NULL) {
+    int file = open(filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t) 0600);
+    if (file == -1) {
         perror("Can't open");
         exit(EXIT_FAILURE);
     }
-    fclose(file);
+    close(file);
 }
 
-void CleanFiles(size_t filesAmount, FILE** files) {
+void CleanFiles(size_t filesAmount, int * files) {
     int i;
     char filename[5];
     for (i = 0; i < filesAmount; i++) {
         sprintf(filename, "%d", i);
-        files[i] = fopen(filename, "wb+");
-        if (files[i] == NULL) {
+        files[i] = open(filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t) 0600);
+        if (files[i] == -1) {
             perror("Can't open");
             exit(EXIT_FAILURE);
         }
-        fclose(files[i]);
+        close(files[i]);
     }
 }
 
-void OpenFiles(size_t filesAmount, FILE** files) {
+void OpenFiles(size_t filesAmount, int * files) {
     int i;
     char filename[5];
-    int fd;
     for (i = 0; i < filesAmount; i++) {
         sprintf(filename, "%d", i);
-        files[i] = fopen(filename, "ab+");
-        fd = fileno(files[i]);
-        posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-        if (files[i] == NULL) {
+        files[i] = open(filename, O_RDWR | O_CREAT | O_APPEND, (mode_t) 0600);
+        posix_fadvise(files[i], 0, 0, POSIX_FADV_DONTNEED);
+        if (files[i] == -1) {
             perror("Can't open");
             exit(EXIT_FAILURE);
         }
@@ -55,9 +53,9 @@ void OpenFiles(size_t filesAmount, FILE** files) {
 void OpenFile(int fd) {
     char filename[5];
     sprintf(filename, "%d", fd);
-    FILE* file = fopen(filename, "ab+");
+    int file_d = open(filename, O_RDWR | O_CREAT | O_APPEND, (mode_t) 0600);
 
-    if (file == NULL) {
+    if (file_d == -1) {
         perror("Can't open");
         exit(EXIT_FAILURE);
     }
@@ -84,17 +82,18 @@ void* ReadFile(void* args) {
     size_t readBytes;
 
     while (1) {
-        readBytes = fread(readBlock, sizeof(unsigned char), IO_BLOCK_SIZE, fileArgs->file);
+        readBytes = read(fileArgs->fd, &readBlock, IO_BLOCK_SIZE);
+        if (readBytes == -1) {
+            perror("Error reading from file");
+            break;
+        }
 #ifdef LOG
         sem_wait(&totalBytesReadSem);
         totalBytesRead += readBytes;
         sem_post(&totalBytesReadSem);
 #endif
         if (readBytes < IO_BLOCK_SIZE) {
-            if (feof(fileArgs->file)) {
-                break;
-            } else {
-                perror("Error reading file\n");
+            if (readBytes == 0) {
                 break;
             }
         } else {
@@ -123,26 +122,34 @@ void* WriteToMemory(void* args) {
     free(writeArgs);
 }
 
-void WriteToFile(const unsigned char* memoryRegion, FILE* file, size_t fileNum, size_t bytesCount) {
+void WriteToFile(const unsigned char* memoryRegion, int fd, size_t fileNum, size_t bytesCount) {
     unsigned char ioBlock[IO_BLOCK_SIZE];
     int ioBlockByte = 0;
     int totalBytesWrittenToFile = 0;
-    for (size_t i = fileNum * OUTPUT_FILE_SIZE; i < fileNum * OUTPUT_FILE_SIZE + bytesCount; i++) {
+    size_t bytesWritten;
+    size_t i;
+    for (i = fileNum * OUTPUT_FILE_SIZE; i < fileNum * OUTPUT_FILE_SIZE + bytesCount; i++) {
         ioBlock[ioBlockByte] = memoryRegion[i];
         ioBlockByte += 1;
         if (ioBlockByte >= IO_BLOCK_SIZE) {
-            fwrite(&ioBlock, sizeof(unsigned char), IO_BLOCK_SIZE, file);
             ioBlockByte = 0;
-            totalBytesWrittenToFile += IO_BLOCK_SIZE;
+            bytesWritten = write(fd, &ioBlock, IO_BLOCK_SIZE);
+            if (bytesWritten == -1) {
+                perror("Can't write to file");
+                return;
+            }
+            totalBytesWrittenToFile += bytesWritten;
         }
     }
 
     if (ioBlockByte > 0) {
-        fprintf(file, "%s", ioBlock);
-        totalBytesWrittenToFile += ioBlockByte + 1;
+        bytesWritten = write(fd, &ioBlock, IO_BLOCK_SIZE - ioBlockByte);
+        if (bytesWritten == -1) {
+            perror("Can't write to file");
+            return;
+        }
+        totalBytesWrittenToFile += bytesWritten;
     }
-
-    fflush(file);
 #ifdef LOG
     printf("Total bytes written to file: %d\n", totalBytesWrittenToFile);
 #endif
@@ -179,7 +186,7 @@ void* WriteToFilesOnce(void* args) {
         } else {
             WriteToFile(writeToFilesArgs->memoryRegion, writeToFilesArgs->files[i], i, writeToFilesArgs->fileSizeRemainder);
         }
-        fclose(writeToFilesArgs->files[i]);
+        close(writeToFilesArgs->files[i]);
     }
     clock_gettime(CLOCK_MONOTONIC, &finish);
 

@@ -146,10 +146,11 @@ int main() {
 //#ifdef LOG
     printf("Files amount: %d\n", filesAmount);
 //#endif
-    FILE* files[filesAmount];
+    int files[filesAmount];
     sem_t * fileSems = malloc(sizeof(sem_t) * filesAmount);
     CleanFiles(filesAmount, files);
     OpenFiles(filesAmount, files);
+    printf("Here\n");
     pthread_t writeToFilesThreadId;
 
     for (i = 0; i < filesAmount; i++) {
@@ -197,7 +198,7 @@ int main() {
     for (i = 0; i < READ_THREADS_AMOUNT; i++) {
         struct ReadFromFileArgs* fileArgs = malloc(sizeof(struct ReadFromFileArgs));
         if (fileIndex >= filesAmount) fileIndex = 0;
-        fileArgs->file = files[fileIndex];
+        fileArgs->fd = files[fileIndex];
         fileArgs->sem = fileSems[fileIndex];
         fileArgs->fileIndex = fileIndex;
         fileIndex += 1;
@@ -224,7 +225,7 @@ int main() {
     printf("Max value is: %d\n", max);
 
     for (i = 0; i < filesAmount; i++) {
-        fclose(files[i]);
+        close(files[i]);
     }
 
     pthread_cancel(writeToFilesThreadId);

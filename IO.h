@@ -16,7 +16,7 @@ struct WriteToMemoryArgs {
 };
 
 struct ReadFromFileArgs {
-    FILE* file;
+    int fd;
     sem_t sem;
     size_t fileIndex;
 };
@@ -26,15 +26,15 @@ struct WriteToFilesArgs {
     size_t fileSizeQuotient;
     size_t fileSizeRemainder;
     unsigned char* memoryRegion;
-    FILE ** files;
     sem_t* fileSems;
+    int* files;
 };
 
 void CleanFile(int fd);
 
-void CleanFiles(size_t filesAmount, FILE** files);
+void CleanFiles(size_t filesAmount, int* files);
 
-void OpenFiles(size_t filesAmount, FILE** files);
+void OpenFiles(size_t filesAmount, int* files);
 
 void OpenFile(int fd);
 
@@ -44,7 +44,7 @@ void* ReadFile(void* args);
 
 void* WriteToMemory(void* args);
 
-void WriteToFile(const unsigned char* memoryRegion, FILE* file, size_t fileNum, size_t bytesCount);
+void WriteToFile(const unsigned char* memoryRegion, int fd, size_t fileNum, size_t bytesCount);
 
 void* WriteToFilesOnce(void* args);
 
