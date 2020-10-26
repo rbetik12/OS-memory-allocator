@@ -45,7 +45,6 @@ void OpenFiles(size_t filesAmount, FILE** files) {
         files[i] = fopen(filename, "ab+");
         fd = fileno(files[i]);
         posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
-        posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
         if (files[i] == NULL) {
             perror("Can't open");
             exit(EXIT_FAILURE);

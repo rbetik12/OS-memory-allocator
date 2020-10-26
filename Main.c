@@ -7,6 +7,9 @@
 #include <string.h>
 #include <semaphore.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
 
 #include "IO.h"
 #include "Constants.h"
@@ -56,10 +59,9 @@ int main() {
 
     printf("After input char program will allocate memory\n");
     getchar();
-    unsigned char* memoryRegion = (unsigned char*) 0x28B070E0;
 
-    memoryRegion = mmap(
-            (void*) memoryRegion,
+    unsigned char* memoryRegion = mmap(
+            (void*) ADDRESS,
             bytes,
             PROT_READ | PROT_WRITE,
             MAP_SHARED,
@@ -87,8 +89,7 @@ int main() {
     int thread = 0;
     int i;
 
-    struct timespec start, finish;
-    double elapsed;
+    struct timespec start;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
 
@@ -125,6 +126,9 @@ int main() {
     for (i = 0; i < THREADS_AMOUNT; i++) {
         pthread_join(writeToMemoryThreads[i], NULL);
     }
+
+    struct timespec finish;
+    double elapsed;
 
     clock_gettime(CLOCK_MONOTONIC, &finish);
 
@@ -243,7 +247,6 @@ int main() {
     if (close(randomFD)) {
         printf("Error in closing file.\n");
     }
-
 
     return 0;
 }

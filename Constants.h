@@ -7,6 +7,7 @@
 #define OUTPUT_FILE_SIZE 47
 #define IO_BLOCK_SIZE 36
 #define READ_THREADS_AMOUNT 139
+#define ADDRESS 0x28B070E0
 //#define LOG
 
 #endif //LAB1_CONSTANTS_H
